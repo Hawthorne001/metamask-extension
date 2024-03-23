@@ -147,6 +147,7 @@ export const CHAIN_IDS = {
   ZKSYNC_ERA: '0x144',
   TEST_ETH: '0x539',
   ARBITRUM_GOERLI: '0x66eed',
+  BLAST: '0x13e31',
 } as const;
 
 const CHAINLIST_CHAIN_IDS_MAP = {
@@ -382,7 +383,7 @@ export const ENDURANCE_SMART_CHAIN_MAINNET_IMAGE_URL =
 export const ETHEREUM_CLASSIC_MAINNET_IMAGE_URL = './images/eth_classic.svg';
 export const EVMOS_IMAGE_URL = './images/evmos.svg';
 export const FLARE_MAINNET_IMAGE_URL = './images/flare-mainnet.svg';
-export const FUSE_GOLD_MAINNET_IMAGE_URL = './images/fuse-mainnet.jpeg';
+export const FUSE_GOLD_MAINNET_IMAGE_URL = './images/fuse-mainnet.jpg';
 export const HAQQ_NETWORK_IMAGE_URL = './images/haqq.svg';
 export const KCC_MAINNET_IMAGE_URL = './images/kcc-mainnet.svg';
 export const KLAYTN_MAINNET_IMAGE_URL = './images/klaytn.svg';
@@ -841,7 +842,6 @@ export const BUYABLE_CHAINS_MAP: {
     | typeof CHAIN_IDS.OPTIMISM_TESTNET
     | typeof CHAIN_IDS.OPTIMISM_GOERLI
     | typeof CHAIN_IDS.BASE_TESTNET
-    | typeof CHAIN_IDS.BASE
     | typeof CHAIN_IDS.OPBNB_TESTNET
     | typeof CHAIN_IDS.OPBNB
     | typeof CHAIN_IDS.BSC_TESTNET
@@ -855,6 +855,7 @@ export const BUYABLE_CHAINS_MAP: {
     | typeof CHAIN_IDS.GNOSIS
     | typeof CHAIN_IDS.AURORA
     | typeof CHAIN_IDS.ARBITRUM_GOERLI
+    | typeof CHAIN_IDS.BLAST
   >]: BuyableChainSettings;
 } = {
   [CHAIN_IDS.MAINNET]: {
@@ -916,6 +917,10 @@ export const BUYABLE_CHAINS_MAP: {
   [CHAIN_IDS.ZKSYNC_ERA]: {
     nativeCurrency: CURRENCY_SYMBOLS.ETH,
     network: 'zksync',
+  },
+  [CHAIN_IDS.BASE]: {
+    nativeCurrency: CURRENCY_SYMBOLS.ETH,
+    network: 'base',
   },
 };
 

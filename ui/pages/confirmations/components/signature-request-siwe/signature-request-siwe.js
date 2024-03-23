@@ -18,7 +18,7 @@ import {
   getTotalUnapprovedMessagesCount,
   unconfirmedMessagesHashSelector,
 } from '../../../../selectors';
-import { getAccountByAddress, valuesFor } from '../../../../helpers/utils/util';
+import { valuesFor, getAccountByAddress } from '../../../../helpers/utils/util';
 import { isSuspiciousResponse } from '../../../../../shared/modules/security-provider.utils';
 import { formatMessageParams } from '../../../../../shared/modules/siwe';
 import { clearConfirmTransaction } from '../../../../ducks/confirm-transaction/confirm-transaction.duck';
@@ -153,7 +153,7 @@ export default function SignatureRequestSIWE({
         <SignatureRequestHeader txData={txData} />
         {
           ///: BEGIN:ONLY_INCLUDE_IF(blockaid)
-          <BlockaidBannerAlert txData={txData} margin={4} />
+          <BlockaidBannerAlert txData={txData} margin={[4, 4, 0, 4]} />
           ///: END:ONLY_INCLUDE_IF
         }
         {showSecurityProviderBanner && (
