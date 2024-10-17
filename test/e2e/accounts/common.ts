@@ -1,4 +1,5 @@
 import { privateToAddress } from 'ethereumjs-util';
+import messages from '../../../app/_locales/en/messages.json';
 import FixtureBuilder from '../fixture-builder';
 import {
   PRIVATE_KEY,
@@ -9,16 +10,14 @@ import {
   unlockWallet,
   validateContractDetails,
   multipleGanacheOptions,
-  regularDelayMs,
 } from '../helpers';
 import { Driver } from '../webdriver/driver';
-import { TEST_SNAPS_SIMPLE_KEYRING_WEBSITE_URL } from '../constants';
+import { DAPP_URL, TEST_SNAPS_SIMPLE_KEYRING_WEBSITE_URL } from '../constants';
 import { retry } from '../../../development/lib/retry';
 
 /**
  * These are fixtures specific to Account Snap E2E tests:
  * -- connected to Test Dapp
- * -- eth_sign enabled
  * -- two private keys with 25 ETH each
  *
  * @param title
@@ -27,11 +26,8 @@ export const accountSnapFixtures = (title: string | undefined) => {
   return {
     dapp: true,
     fixtures: new FixtureBuilder()
-      .withPermissionControllerConnectedToTestDapp(false)
-      .withPreferencesController({
-        disabledRpcMethodPreferences: {
-          eth_sign: true,
-        },
+      .withPermissionControllerConnectedToTestDapp({
+        restrictReturnedAccounts: false,
       })
       .build(),
     ganacheOptions: multipleGanacheOptions,
@@ -52,6 +48,7 @@ export async function installSnapSimpleKeyring(
 
   // navigate to test Snaps page and connect
   await driver.openNewPage(TEST_SNAPS_SIMPLE_KEYRING_WEBSITE_URL);
+
   await driver.clickElement('#connectButton');
 
   await driver.delay(500);
@@ -65,20 +62,16 @@ export async function installSnapSimpleKeyring(
     tag: 'button',
   });
 
-  await driver.findElement({ text: 'Installation request', tag: 'h2' });
+  await driver.findElement({ text: 'Add to MetaMask', tag: 'h3' });
 
   await driver.clickElementSafe('[data-testid="snap-install-scroll"]', 200);
 
-  await driver.waitForSelector({ text: 'Install' });
-
   await driver.clickElement({
-    text: 'Install',
+    text: 'Confirm',
     tag: 'button',
   });
 
-  await driver.waitForSelector({ text: 'OK' });
-
-  await driver.clickElement({
+  await driver.clickElementAndWaitForWindowToClose({
     text: 'OK',
     tag: 'button',
   });
@@ -120,6 +113,12 @@ export async function importKeyAndSwitch(driver: Driver) {
     css: '[data-testid="confirmation-submit-button"]',
     text: 'Create',
   });
+  // Click the add account button on the naming modal
+  await driver.clickElement({
+    css: '[data-testid="submit-add-account-with-name"]',
+    text: 'Add account',
+  });
+  // Click the ok button on the success modal
   await driver.clickElement({
     css: '[data-testid="confirmation-submit-button"]',
     text: 'Ok',
@@ -146,7 +145,13 @@ export async function makeNewAccountAndSwitch(driver: Driver) {
     css: '[data-testid="confirmation-submit-button"]',
     text: 'Create',
   });
+  // Click the add account button on the naming modal
   await driver.clickElement({
+    css: '[data-testid="submit-add-account-with-name"]',
+    text: 'Add account',
+  });
+  // Click the ok button on the success modal
+  await driver.clickElementAndWaitForWindowToClose({
     css: '[data-testid="confirmation-submit-button"]',
     text: 'Ok',
   });
@@ -172,7 +177,7 @@ async function switchToAccount2(driver: Driver) {
 
   await driver.clickElement({
     tag: 'Button',
-    text: 'Snap Account 1',
+    text: 'SSK Account',
   });
 
   await driver.assertElementNotPresent({
@@ -185,26 +190,54 @@ export async function connectAccountToTestDapp(driver: Driver) {
   await switchToOrOpenDapp(driver);
   await driver.clickElement('#connectButton');
 
-  await driver.delay(regularDelayMs);
   await driver.switchToWindowWithTitle(WINDOW_TITLES.Dialog);
-  await driver.clickElement({
-    text: 'Next',
+
+  // Extra steps needed to preserve the current network.
+  // Those can be removed once the issue is fixed (#27891)
+  const edit = await driver.findClickableElements({
+    text: 'Edit',
     tag: 'button',
-    css: '[data-testid="page-container-footer-next"]',
   });
+  await edit[1].click();
+
+  await driver.clickElement({
+    tag: 'p',
+    text: 'Localhost 8545',
+  });
+
+  await driver.clickElement({
+    text: 'Update',
+    tag: 'button',
+  });
+
+  // Connect to the test dapp
   await driver.clickElement({
     text: 'Connect',
     tag: 'button',
-    css: '[data-testid="page-container-footer-next"]',
+  });
+
+  await driver.switchToWindowWithUrl(DAPP_URL);
+  // Ensure network is preserved after connecting
+  await driver.waitForSelector({
+    css: '[id="chainId"]',
+    text: '0x539',
   });
 }
 
 export async function disconnectFromTestDapp(driver: Driver) {
   await driver.switchToWindowWithTitle(WINDOW_TITLES.ExtensionInFullScreenView);
   await driver.clickElement('[data-testid="account-options-menu-button"]');
-  await driver.clickElement('[data-testid="global-menu-connected-sites"]');
-  await driver.clickElement({ text: 'Disconnect', tag: 'a' });
+  await driver.clickElement({ text: 'All Permissions', tag: 'div' });
+  await driver.clickElementAndWaitToDisappear({
+    text: 'Got it',
+    tag: 'button',
+  });
+  await driver.clickElement({
+    text: '127.0.0.1:8080',
+    tag: 'p',
+  });
   await driver.clickElement({ text: 'Disconnect', tag: 'button' });
+  await driver.clickElement('[data-testid ="disconnect-all"]');
 }
 
 export async function approveOrRejectRequest(driver: Driver, flowType: string) {
@@ -223,7 +256,7 @@ export async function approveOrRejectRequest(driver: Driver, flowType: string) {
   // get the JSON from the screen
   const requestJSON = await (
     await driver.findElement({
-      text: '"scope": "",',
+      text: '"scope":',
       tag: 'div',
     })
   ).getText();
@@ -278,11 +311,7 @@ export async function signData(
     },
     async () => {
       await switchToOrOpenDapp(driver);
-
       await driver.clickElement(locatorID);
-
-      // take extra time to load the popup
-      await driver.delay(500);
 
       await driver.switchToWindowWithTitle(WINDOW_TITLES.Dialog);
     },
@@ -293,7 +322,7 @@ export async function signData(
     await validateContractDetails(driver);
   }
 
-  await clickSignOnSignatureConfirmation(driver, 3, locatorID);
+  await clickSignOnSignatureConfirmation({ driver });
 
   if (isAsyncFlow) {
     await driver.delay(2000);
@@ -347,4 +376,25 @@ export async function signData(
       text: 'Error: Request rejected by user or snap.',
     });
   }
+}
+
+export async function createBtcAccount(driver: Driver) {
+  await driver.clickElement('[data-testid="account-menu-icon"]');
+  await driver.clickElement(
+    '[data-testid="multichain-account-menu-popover-action-button"]',
+  );
+  await driver.clickElement({
+    text: messages.addNewBitcoinAccount.message,
+    tag: 'button',
+  });
+  await driver.clickElementAndWaitToDisappear(
+    {
+      text: 'Add account',
+      tag: 'button',
+    },
+    // Longer timeout than usual, this reduces the flakiness
+    // around Bitcoin account creation (mainly required for
+    // Firefox)
+    5000,
+  );
 }
