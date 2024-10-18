@@ -13,21 +13,26 @@ import {
 import {
   REFRESH_TOKEN_CHANGE_EVENT,
   INTERACTIVE_REPLACEMENT_TOKEN_CHANGE_EVENT,
+  API_REQUEST_LOG_EVENT,
 } from '@metamask-institutional/sdk';
 import { handleMmiPortfolio } from '@metamask-institutional/portfolio-dashboard';
+import { CustodyController } from '@metamask-institutional/custody-controller';
+import { IApiCallLogEntry } from '@metamask-institutional/types';
+import { TransactionUpdateController } from '@metamask-institutional/transaction-update';
 import { TransactionMeta } from '@metamask/transaction-controller';
 import { KeyringTypes } from '@metamask/keyring-controller';
-import { CustodyController } from '@metamask-institutional/custody-controller';
-import { TransactionUpdateController } from '@metamask-institutional/transaction-update';
-import { SignatureController } from '@metamask/signature-controller';
 import {
-  OriginalRequest,
-  PersonalMessageParams,
-} from '@metamask/message-manager';
+  MessageParamsPersonal,
+  MessageParamsTyped,
+  SignatureController,
+} from '@metamask/signature-controller';
+import { OriginalRequest } from '@metamask/message-manager';
 import { NetworkController } from '@metamask/network-controller';
 import { InternalAccount } from '@metamask/keyring-api';
+import { toHex } from '@metamask/controller-utils';
 import { toChecksumHexAddress } from '../../../shared/modules/hexstring-utils';
-import { CHAIN_IDS } from '../../../shared/constants/network';
+// TODO: Remove restricted import
+// eslint-disable-next-line import/no-restricted-paths
 import { CONNECT_HARDWARE_ROUTE } from '../../../ui/helpers/constants/routes';
 import {
   MMIControllerOptions,
@@ -35,12 +40,16 @@ import {
   IInteractiveRefreshTokenChangeEvent,
   Label,
   Signature,
+  ConnectionRequest,
 } from '../../../shared/constants/mmi-controller';
-import AccountTracker from '../lib/account-tracker';
-import AppStateController from './app-state';
+// TODO: Remove restricted import
+// eslint-disable-next-line import/no-restricted-paths
+import { getCurrentChainId } from '../../../ui/selectors';
 import MetaMetricsController from './metametrics';
 import { getPermissionBackgroundApiMethods } from './permissions';
-import { PreferencesController } from './preferences';
+import AccountTrackerController from './account-tracker-controller';
+import { AppStateController } from './app-state-controller';
+import { PreferencesController } from './preferences-controller';
 
 type UpdateCustodianTransactionsParameters = {
   keyring: CustodyKeyring;
@@ -48,6 +57,8 @@ type UpdateCustodianTransactionsParameters = {
   txList: string[];
   custodyController: CustodyController;
   transactionUpdateController: TransactionUpdateController;
+  // TODO: Replace `any` with type
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   txStateManager: any;
   getPendingNonce: (address: string) => Promise<number>;
   setTxHash: (txId: string, txHash: string) => void;
@@ -58,6 +69,8 @@ export default class MMIController extends EventEmitter {
 
   public mmiConfigurationController: MmiConfigurationController;
 
+  // TODO: Replace `any` with type
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public keyringController: any;
 
   public preferencesController: PreferencesController;
@@ -68,38 +81,60 @@ export default class MMIController extends EventEmitter {
 
   private custodyController: CustodyController;
 
+  // TODO: Replace `any` with type
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private getState: () => any;
 
+  // TODO: Replace `any` with type
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private getPendingNonce: (address: string) => Promise<any>;
 
-  private accountTracker: AccountTracker;
+  private accountTrackerController: AccountTrackerController;
 
   private metaMetricsController: MetaMetricsController;
 
   private networkController: NetworkController;
 
+  // TODO: Replace `any` with type
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private permissionController: any;
 
   private signatureController: SignatureController;
 
+  // TODO: Replace `any` with type
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private messenger: any;
 
+  // TODO: Replace `any` with type
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private platform: any;
 
+  // TODO: Replace `any` with type
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private extension: any;
 
   private updateTransactionHash: (txId: string, txHash: string) => void;
 
+  private setChannelId: (channelId: string) => void;
+
+  private setConnectionRequest: (payload: ConnectionRequest | null) => void;
+
   public trackTransactionEvents: (
     args: { transactionMeta: TransactionMeta },
+    // TODO: Replace `any` with type
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     event: any,
   ) => void;
 
   private txStateManager: {
+    // TODO: Replace `any` with type
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getTransactions: (query?: any, opts?: any, fullTx?: boolean) => any[];
     setTxStatusSigned: (txId: string) => void;
     setTxStatusSubmitted: (txId: string) => void;
     setTxStatusFailed: (txId: string) => void;
+    // TODO: Replace `any` with type
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     updateTransaction: (txMeta: any) => void;
   };
 
@@ -116,7 +151,7 @@ export default class MMIController extends EventEmitter {
     this.custodyController = opts.custodyController;
     this.getState = opts.getState;
     this.getPendingNonce = opts.getPendingNonce;
-    this.accountTracker = opts.accountTracker;
+    this.accountTrackerController = opts.accountTrackerController;
     this.metaMetricsController = opts.metaMetricsController;
     this.networkController = opts.networkController;
     this.permissionController = opts.permissionController;
@@ -125,6 +160,8 @@ export default class MMIController extends EventEmitter {
     this.extension = opts.extension;
 
     this.updateTransactionHash = opts.updateTransactionHash;
+    this.setChannelId = opts.setChannelId;
+    this.setConnectionRequest = opts.setConnectionRequest;
 
     this.trackTransactionEvents = opts.trackTransactionEvents;
     this.txStateManager = {
@@ -163,6 +200,20 @@ export default class MMIController extends EventEmitter {
         await this.handleSigningEvents(signature, messageId, 'v4');
       },
     );
+
+    this.transactionUpdateController.on(
+      'handshake',
+      async ({ channelId }: { channelId: string }) => {
+        this.setChannelId(channelId);
+      },
+    );
+
+    this.transactionUpdateController.on(
+      'connection.request',
+      async (payload: ConnectionRequest) => {
+        this.setConnectionRequest(payload);
+      },
+    );
   } // End of constructor
 
   async persistKeyringsAfterRefreshTokenChange() {
@@ -171,6 +222,8 @@ export default class MMIController extends EventEmitter {
 
   async trackTransactionEventFromCustodianEvent(
     txMeta: TransactionMeta,
+    // TODO: Replace `any` with type
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     event: any,
   ) {
     // transactionMetricsRequest parameter is already bound in the constructor
@@ -254,6 +307,10 @@ export default class MMIController extends EventEmitter {
           },
         );
 
+        keyring.on(API_REQUEST_LOG_EVENT, (logData: IApiCallLogEntry) => {
+          this.logAndStoreApiRequest(logData);
+        });
+
         // store the supported chains for this custodian type
         const accounts = await keyring.getAccounts();
         addresses = addresses.concat(...accounts);
@@ -322,6 +379,8 @@ export default class MMIController extends EventEmitter {
       string,
       {
         name: string;
+        // TODO: Replace `any` with type
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         custodianDetails: any;
         labels: Label[];
         token: string;
@@ -367,6 +426,10 @@ export default class MMIController extends EventEmitter {
       },
     );
 
+    keyring.on(API_REQUEST_LOG_EVENT, (logData: IApiCallLogEntry) => {
+      this.logAndStoreApiRequest(logData);
+    });
+
     if (!keyring) {
       throw new Error('Unable to get keyring');
     }
@@ -406,7 +469,7 @@ export default class MMIController extends EventEmitter {
     const allAccounts = await this.keyringController.getAccounts();
 
     const accountsToTrack = [
-      ...new Set(
+      ...new Set<string>(
         oldAccounts.concat(allAccounts.map((a: string) => a.toLowerCase())),
       ),
     ];
@@ -452,7 +515,7 @@ export default class MMIController extends EventEmitter {
       }
     });
 
-    this.accountTracker.syncWithAddresses(accountsToTrack);
+    this.accountTrackerController.syncWithAddresses(accountsToTrack);
 
     for (const address of newAccounts) {
       try {
@@ -523,33 +586,6 @@ export default class MMIController extends EventEmitter {
     return accounts;
   }
 
-  async getCustodianAccountsByAddress(
-    token: string,
-    envName: string,
-    address: string,
-    custodianType: string,
-  ) {
-    let keyring;
-
-    if (custodianType) {
-      const custodian = CUSTODIAN_TYPES[custodianType.toUpperCase()];
-      if (!custodian) {
-        throw new Error('No such custodian');
-      }
-
-      keyring = await this.addKeyringIfNotExists(custodian.keyringClass.type);
-    } else {
-      throw new Error('No custodian specified');
-    }
-
-    const accounts = await keyring.getCustodianAccounts(
-      token,
-      envName,
-      address,
-    );
-    return accounts;
-  }
-
   async getCustodianTransactionDeepLink(address: string, txId: string) {
     const custodyType = this.custodyController.getCustodyTypeByAddress(
       toChecksumHexAddress(address),
@@ -594,7 +630,9 @@ export default class MMIController extends EventEmitter {
   async getCustodianToken(address: string) {
     const keyring = await this.keyringController.getKeyringForAccount(address);
     const { authDetails } = keyring.getAccountDetails(address);
-    return keyring ? authDetails.jwt || authDetails.refreshToken : '';
+    return keyring
+      ? (authDetails && (authDetails.jwt || authDetails.refreshToken)) || ''
+      : '';
   }
 
   // Based on a custodian name, get all the tokens associated with that custodian
@@ -736,15 +774,9 @@ export default class MMIController extends EventEmitter {
       this.custodyController.getAccountDetails(address);
     const extensionId = this.extension.runtime.id;
 
-    const { networkConfigurations: networkConfigurationsById } =
-      this.networkController.state;
-    const networkConfigurations = Object.values(networkConfigurationsById);
-
-    const networks = [
-      ...networkConfigurations,
-      { chainId: CHAIN_IDS.MAINNET },
-      { chainId: CHAIN_IDS.SEPOLIA },
-    ];
+    const networks = Object.values(
+      this.networkController.state.networkConfigurationsByChainId,
+    );
 
     return handleMmiPortfolio({
       keyringAccounts,
@@ -768,23 +800,25 @@ export default class MMIController extends EventEmitter {
     const isCustodial = Boolean(accountDetails);
     const updatedMsgParams = { ...msgParams, deferSetAsSigned: isCustodial };
 
-    if (req.method.includes('eth_signTypedData')) {
+    if (
+      req.method === 'eth_signTypedData' ||
+      req.method === 'eth_signTypedData_v3' ||
+      req.method === 'eth_signTypedData_v4'
+    ) {
       return await this.signatureController.newUnsignedTypedMessage(
-        updatedMsgParams as PersonalMessageParams,
+        updatedMsgParams as MessageParamsTyped,
         req as OriginalRequest,
         version,
         { parseJsonData: false },
       );
-    } else if (req.method.includes('personal_sign')) {
+    } else if (req.method === 'personal_sign') {
       return await this.signatureController.newUnsignedPersonalMessage(
-        updatedMsgParams as PersonalMessageParams,
+        updatedMsgParams as MessageParamsPersonal,
         req as OriginalRequest,
       );
     }
-    return await this.signatureController.newUnsignedMessage(
-      updatedMsgParams as PersonalMessageParams,
-      req as OriginalRequest,
-    );
+
+    throw new Error('Unexpected method');
   }
 
   async handleSigningEvents(
@@ -828,26 +862,24 @@ export default class MMIController extends EventEmitter {
         internalAccount.id,
       );
     }
-    const selectedChainId = parseInt(
-      this.networkController.state.providerConfig.chainId,
-      16,
-    );
-    if (selectedChainId !== chainId && chainId === 1) {
-      await this.networkController.setProviderType('mainnet');
-    } else if (selectedChainId !== chainId) {
-      const { networkConfigurations } = this.networkController.state;
 
-      const foundNetworkConfiguration = Object.values(
-        networkConfigurations,
-      ).find(
-        (networkConfiguration) =>
-          parseInt(networkConfiguration.chainId, 16) === chainId,
-      );
+    const selectedChainId = getCurrentChainId({
+      metamask: this.networkController.state,
+    });
 
-      if (foundNetworkConfiguration !== undefined) {
-        await this.networkController.setActiveNetwork(
-          foundNetworkConfiguration.id,
-        );
+    if (selectedChainId !== toHex(chainId)) {
+      const networkConfiguration =
+        this.networkController.state.networkConfigurationsByChainId[
+          toHex(chainId)
+        ];
+
+      const { networkClientId } =
+        networkConfiguration?.rpcEndpoints?.[
+          networkConfiguration.defaultRpcEndpointIndex
+        ] ?? {};
+
+      if (networkClientId) {
+        await this.networkController.setActiveNetwork(networkClientId);
       }
     }
 
@@ -862,5 +894,15 @@ export default class MMIController extends EventEmitter {
     await this.appStateController.getUnlockPromise(true);
     this.platform.openExtensionInBrowser(CONNECT_HARDWARE_ROUTE);
     return true;
+  }
+
+  async logAndStoreApiRequest(logData: IApiCallLogEntry) {
+    try {
+      const logs = await this.custodyController.sanitizeAndLogApiCall(logData);
+      return logs;
+    } catch (error) {
+      log.error('Error fetching extension request logs:', error);
+      throw error;
+    }
   }
 }
