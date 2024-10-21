@@ -1,4 +1,7 @@
-import { SimulationData } from '@metamask/transaction-controller';
+import {
+  SimulationData,
+  SimulationErrorCode,
+} from '@metamask/transaction-controller';
 import { useContext, useEffect, useState } from 'react';
 import { NameType } from '@metamask/name-controller';
 import { useTransactionEventFragment } from '../../hooks/useTransactionEventFragment';
@@ -15,12 +18,14 @@ import {
 } from '../../../../../shared/constants/metametrics';
 import { calculateTotalFiat } from './fiat-display';
 import { BalanceChange } from './types';
+import { useLoadingTime } from './useLoadingTime';
 
 export type UseSimulationMetricsProps = {
   balanceChanges: BalanceChange[];
-  loadingTime?: number;
+  loading: boolean;
   simulationData?: SimulationData;
   transactionId: string;
+  enableMetrics: boolean;
 };
 
 export enum SimulationResponseType {
@@ -51,17 +56,25 @@ export enum PetnameType {
 
 export function useSimulationMetrics({
   balanceChanges,
-  loadingTime,
+  loading,
   simulationData,
   transactionId,
+  enableMetrics,
 }: UseSimulationMetricsProps) {
-  const displayNameRequests: UseDisplayNameRequest[] = balanceChanges.map(
-    ({ asset }) => ({
-      value: asset.address ?? '',
+  const { loadingTime, setLoadingComplete } = useLoadingTime();
+
+  if (!loading) {
+    setLoadingComplete();
+  }
+
+  const displayNameRequests: UseDisplayNameRequest[] = balanceChanges
+    // Filter out changes with no address (e.g. ETH)
+    .filter(({ asset }) => Boolean(asset.address))
+    .map(({ asset }) => ({
+      value: asset.address as string,
       type: NameType.ETHEREUM_ADDRESS,
       preferContractSymbol: true,
-    }),
-  );
+    }));
 
   const displayNames = useDisplayNames(displayNameRequests);
 
@@ -78,11 +91,11 @@ export function useSimulationMetrics({
   useIncompleteAssetEvent(balanceChanges, displayNamesByAddress);
 
   const receivingAssets = balanceChanges.filter(
-    (change) => !change.amount.isNegative,
+    (change) => !change.amount.isNegative(),
   );
 
-  const sendingAssets = balanceChanges.filter(
-    (change) => change.amount.isNegative,
+  const sendingAssets = balanceChanges.filter((change) =>
+    change.amount.isNegative(),
   );
 
   const simulationResponse = getSimulationResponseType(simulationData);
@@ -110,14 +123,32 @@ export function useSimulationMetrics({
 
   const params = { properties, sensitiveProperties };
 
+  const shouldSkipMetrics =
+    !enableMetrics ||
+    [
+      SimulationErrorCode.ChainNotSupported,
+      SimulationErrorCode.Disabled,
+    ].includes(simulationData?.error?.code as SimulationErrorCode);
+
   useEffect(() => {
+    if (shouldSkipMetrics) {
+      return;
+    }
+
     updateTransactionEventFragment(params, transactionId);
-  }, [transactionId, JSON.stringify(params)]);
+  }, [
+    shouldSkipMetrics,
+    updateTransactionEventFragment,
+    transactionId,
+    JSON.stringify(params),
+  ]);
 }
 
 function useIncompleteAssetEvent(
   balanceChanges: BalanceChange[],
-  displayNamesByAddress: { [address: string]: UseDisplayNameResponse },
+  displayNamesByAddress: {
+    [address: string]: UseDisplayNameResponse | undefined;
+  },
 ) {
   const trackEvent = useContext(MetaMetricsContext);
   const [processedAssets, setProcessedAssets] = useState<string[]>([]);
@@ -142,7 +173,7 @@ function useIncompleteAssetEvent(
       properties: {
         asset_address: change.asset.address,
         asset_petname: getPetnameType(change, displayName),
-        asset_symbol: displayName.contractDisplayName,
+        asset_symbol: displayName?.contractDisplayName,
         asset_type: getAssetType(change.asset.standard),
         fiat_conversion_available: change.fiatAmount
           ? FiatType.Available
@@ -189,6 +220,8 @@ function getSensitiveProperties(changes: BalanceChange[], prefix: string) {
   return getPrefixProperties({ total_value: totalValue }, prefix);
 }
 
+// TODO: Replace `any` with type
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getPrefixProperties(properties: Record<string, any>, prefix: string) {
   return Object.entries(properties).reduce(
     (acc, [key, value]) => ({
@@ -214,7 +247,7 @@ function getAssetType(standard: TokenStandard) {
 
 function getPetnameType(
   balanceChange: BalanceChange,
-  displayName: UseDisplayNameResponse,
+  displayName: UseDisplayNameResponse = { name: '', hasPetname: false },
 ) {
   if (balanceChange.asset.standard === TokenStandard.none) {
     return PetnameType.Default;
@@ -238,7 +271,7 @@ function getSimulationResponseType(
     return SimulationResponseType.InProgress;
   }
 
-  if (simulationData.error?.isReverted) {
+  if (simulationData.error?.code === SimulationErrorCode.Reverted) {
     return SimulationResponseType.Reverted;
   }
 

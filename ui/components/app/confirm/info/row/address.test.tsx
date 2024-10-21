@@ -4,10 +4,13 @@ import mockState from '../../../../../../test/data/mock-state.json';
 import { renderWithProvider } from '../../../../../../test/lib/render-helpers';
 import { shortenAddress } from '../../../../../helpers/utils/util';
 import configureStore from '../../../../../store/store';
+import { mockNetworkState } from '../../../../../../test/stub/networks';
 import { ConfirmInfoRowAddress } from './address';
 import { TEST_ADDRESS } from './constants';
 
 const render = (
+  // TODO: Replace `any` with type
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   storeOverrides: Record<string, any> = {},
   address: string = TEST_ADDRESS,
 ) => {
@@ -75,9 +78,7 @@ describe('ConfirmInfoRowAddress', () => {
             ...mockState.metamask.preferences,
             petnamesEnabled: false,
           },
-          providerConfig: {
-            chainId: CHAIN_IDS.MAINNET,
-          },
+          ...mockNetworkState({ chainId: CHAIN_IDS.MAINNET }),
           addressBook: {
             [CHAIN_IDS.MAINNET]: {
               [TEST_ADDRESS]: {
@@ -106,9 +107,7 @@ describe('ConfirmInfoRowAddress', () => {
         {
           metamask: {
             ...mockState.metamask,
-            providerConfig: {
-              chainId: CHAIN_IDS.MAINNET,
-            },
+            ...mockNetworkState({ chainId: CHAIN_IDS.MAINNET }),
             tokenList: {
               [WBTC.address]: {
                 address: WBTC.address,

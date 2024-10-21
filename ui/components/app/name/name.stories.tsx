@@ -4,6 +4,7 @@ import { NameType } from '@metamask/name-controller';
 import { Provider } from 'react-redux';
 import configureStore from '../../../store/store';
 import Name from './name';
+import { mockNetworkState } from '../../../../test/stub/networks';
 
 const addressNoSavedNameMock = '0xc0ffee254729296a45a3885639ac7e10f9d54978';
 const addressSavedNameMock = '0xc0ffee254729296a45a3885639ac7e10f9d54977';
@@ -13,9 +14,7 @@ const chainIdMock = '0x1';
 
 const storeMock = configureStore({
   metamask: {
-    providerConfig: {
-      chainId: chainIdMock,
-    },
+    ...mockNetworkState({chainId: chainIdMock}),
     useTokenDetection: true,
     tokenList: {
       '0x0a3bb08b3a15a19b4de82f8acfc862606fb69a2d': {
@@ -23,14 +22,14 @@ const storeMock = configureStore({
         symbol: 'IUSD',
         name: 'iZUMi Bond USD',
         iconUrl:
-          'https://static.metafi.codefi.network/api/v1/tokenIcons/1/0x0a3bb08b3a15a19b4de82f8acfc862606fb69a2d.png',
+          'https://static.cx.metamask.io/api/v1/tokenIcons/1/0x0a3bb08b3a15a19b4de82f8acfc862606fb69a2d.png',
       },
       '0x0a5e677a6a24b2f1a2bf4f3bffc443231d2fdec8': {
         address: '0x0a5e677a6a24b2f1a2bf4f3bffc443231d2fdec8',
         symbol: 'USX',
         name: 'dForce USD',
         iconUrl:
-          'https://static.metafi.codefi.network/api/v1/tokenIcons/1/0x0a5e677a6a24b2f1a2bf4f3bffc443231d2fdec8.png',
+          'https://static.cx.metamask.io/api/v1/tokenIcons/1/0x0a5e677a6a24b2f1a2bf4f3bffc443231d2fdec8.png',
       },
     },
     names: {

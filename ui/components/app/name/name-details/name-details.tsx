@@ -71,6 +71,10 @@ type ProposedNameOption = Required<FormComboFieldOption> & {
 };
 
 function formatValue(value: string, type: NameType): string {
+  if (!value.length) {
+    return value;
+  }
+
   switch (type) {
     case NameType.ETHEREUM_ADDRESS:
       return toChecksumAddress(value);
@@ -156,6 +160,8 @@ function getInitialSources(
 function useProposedNames(value: string, type: NameType, chainId: string) {
   const dispatch = useDispatch();
   const { proposedNames } = useName(value, type);
+  // TODO: Replace `any` with type
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateInterval = useRef<any>();
   const [initialSources, setInitialSources] = useState<string[]>();
 
@@ -174,6 +180,8 @@ function useProposedNames(value: string, type: NameType, chainId: string) {
           onlyUpdateAfterDelay: true,
           variation: chainId,
         }),
+        // TODO: Replace `any` with type
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       )) as any as UpdateProposedNamesResult;
 
       if (!initialSources) {
